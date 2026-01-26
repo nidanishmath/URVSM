@@ -40,7 +40,7 @@ pillow==10.0.1
 
 2. run
 <pre>
-python segment.py --datapath ./data/dataset_name --note note_name
+python segment.py --datapath ./data/dataset_name --note note_name --seg_model Resdounet
 </pre>
 
 3. The results, by default are saved to
@@ -65,7 +65,7 @@ python segment.py --datapath ./data/dataset_name --note note_name
 
 2. run
 <pre>
-python evaluate.py --datapath ./data/dataset_name --note note_name
+python evaluate.py --datapath ./data/dataset_name --note note_name --seg_model Resdounet
 </pre>
 
 3. The metrics are printed as output. The segmented images, by default are saved to
