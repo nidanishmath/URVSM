@@ -73,6 +73,9 @@ python evaluate.py --datapath ./data/dataset_name --note note_name
 ./result/note_name/segmentation
 </pre>
 
+### Note
+For your own retinal images, we recommend applying a circular mask (e.g., `./mask.png`) to the image before using our model. As our training images for the image translation model are all after masking and we find that on regular square image without masking sometimes it will generate some artifacts which can deteriorate the downstream segmentation quality.
+
 ### Training
 For image translation, please refer to [CycleGAN](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix).
 
