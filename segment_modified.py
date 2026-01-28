@@ -5,10 +5,15 @@ import argparse
 import torch
 import cv2 as cv
 import numpy as np
+from torch.utils.data import DataLoader, Dataset
 
 from models.segmentation import UNet_vanilla, ResDO_UNet
 
-class DriveDataset(torch.utils.data.Dataset):
+
+# =========================================================
+# DRIVE DATASET
+# =========================================================
+class DriveDataset(Dataset):
     def __init__(self, img_dir):
         self.img_dir = img_dir
         self.img_names = sorted(os.listdir(img_dir))
@@ -25,118 +30,92 @@ class DriveDataset(torch.utils.data.Dataset):
         return img, name
 
 
-parser = argparse.ArgumentParser()
+# =========================================================
+# ARGUMENTS
+# =========================================================
+parser = argparse.ArgumentParser(description="URVSM Segmentation (No Translation)")
 
-# =========================
 # Essential
-# =========================
-parser.add_argument('--datapath', default='./data/images', help='path to input images')
+parser.add_argument('--datapath', required=True, help='path to input image folder')
 parser.add_argument('--gpu_id', type=str, default='0')
-parser.add_argument('--note', type=str, default='experiment_name')
+parser.add_argument('--note', type=str, default='experiment')
 
-# =========================
-# Segmentation model
-# =========================
+# Model
 parser.add_argument('--seg_model', default='Resdounet',
                     choices=['unet_vanilla', 'Resdounet'])
 
 parser.add_argument('--segnet_checkpoint_unet',
-                    default='./ckpt/segmentation.pth',
-                    help='path to UNet checkpoint')
+                    default='./ckpt/segmentation.pth')
 
 parser.add_argument('--segnet_checkpoint_resdounet',
-                    default='./ckpt/segmentation_resdo.pth',
-                    help='path to ResDO-UNet checkpoint')
+                    default='./ckpt/segmentation_resdo.pth')
 
-# =========================
-# Save paths
-# =========================
-parser.add_argument('--save_segmentation', default='./result',
-                    help='root path to save segmentation results')
+# Output
+parser.add_argument('--save_root', default='./result',
+                    help='root directory to save results')
 
 
+# =========================================================
+# MAIN
+# =========================================================
 def main():
     args = parser.parse_args()
 
     # Device
-    args.device = torch.device(
+    device = torch.device(
         f'cuda:{args.gpu_id}' if torch.cuda.is_available() else 'cpu'
     )
+    print("Using device:", device)
 
     # Output directory
-    args.save_segmentation = os.path.join(
-        args.save_segmentation, args.note, 'segmentation'
-    )
-    if not exists(args.save_segmentation):
-        os.makedirs(args.save_segmentation)
+    save_dir = os.path.join(args.save_root, args.note, 'segmentation')
+    os.makedirs(save_dir, exist_ok=True)
 
-    # =========================
-    # Data loader
-    # =========================
-    eval_dataset = Retinal_loader(args.datapath)
-    eval_loader = torch.utils.data.DataLoader(
-        eval_dataset,
-        batch_size=1,
-        shuffle=False,
-        num_workers=0
-    )
+    # Dataset & Loader
+    dataset = DriveDataset(args.datapath)
+    loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0)
 
-    print("Dataloader ready. Images:", len(eval_dataset))
+    print("Dataloader ready. Images:", len(dataset))
 
-    # =========================
-    # Load segmentation model
-    # =========================
+    # Load model
     if args.seg_model == 'unet_vanilla':
         seg_net = UNet_vanilla()
         seg_net.load_state_dict(
-            torch.load(args.segnet_checkpoint_unet, map_location=args.device)
-        )
-
-    elif args.seg_model == 'Resdounet':
-        seg_net = ResDO_UNet(in_ch=4, out_ch=1)
-        seg_net.load_state_dict(
-            torch.load(args.segnet_checkpoint_resdounet, map_location=args.device)
+            torch.load(args.segnet_checkpoint_unet, map_location=device)
         )
     else:
-        raise ValueError('Unknown segmentation model')
+        seg_net = ResDO_UNet(in_ch=4, out_ch=1)
+        seg_net.load_state_dict(
+            torch.load(args.segnet_checkpoint_resdounet, map_location=device)
+        )
 
-    seg_net = seg_net.to(args.device)
+    seg_net = seg_net.to(device)
     seg_net.eval()
 
-    # =========================
     # Inference
-    # =========================
     with torch.no_grad():
-        for i, (sample, name) in enumerate(eval_loader):
+        for img, name in loader:
             print("Processing:", name[0])
 
-            # Ensure RGB
-            if sample.dim() == 3:
-                sample = sample.unsqueeze(-1).repeat(1, 1, 1, 3)
-
-            sample = sample.permute(0, 3, 1, 2).float().to(args.device)
-            N, C, H, W = sample.shape
+            img = img.to(device)
+            N, C, H, W = img.shape
             assert N == 1
 
             # Initial empty segmentation
-            init_seg = torch.zeros((N, 1, H, W), device=args.device)
+            init_seg = torch.zeros((N, 1, H, W), device=device)
 
             # URVSM iterative refinement (NO translation)
-            net_in = torch.cat((init_seg, sample), dim=1)
-            y = seg_net(net_in)
+            x = torch.cat((init_seg, img), dim=1)
+            y = seg_net(x)
 
             for _ in range(1):
-                net_in = torch.cat((y, sample), dim=1)
-                y = seg_net(net_in)
+                x = torch.cat((y, img), dim=1)
+                y = seg_net(x)
 
-            # Save output
             out = y[0, 0].cpu().numpy()
             out = (out * 255).astype(np.uint8)
 
-            cv.imwrite(
-                os.path.join(args.save_segmentation, f"{name[0]}"),
-                out
-            )
+            cv.imwrite(os.path.join(save_dir, name[0]), out)
 
     print("Segmentation completed successfully!")
 
