@@ -40,7 +40,7 @@ pillow==10.0.1
 
 2. run
 <pre>
-python segment.py --datapath ./data/dataset_name --note note_name
+python segment.py --datapath ./data/dataset_name --note note_name --seg_model Resdounet
 </pre>
 
 3. The results, by default are saved to
@@ -65,13 +65,16 @@ python segment.py --datapath ./data/dataset_name --note note_name
 
 2. run
 <pre>
-python evaluate.py --datapath ./data/dataset_name --note note_name
+python evaluate.py --datapath ./data/dataset_name --note note_name --seg_model Resdounet
 </pre>
 
 3. The metrics are printed as output. The segmented images, by default are saved to
 <pre>
 ./result/note_name/segmentation
 </pre>
+
+### Note
+For your own retinal images, we recommend applying a circular mask (e.g., `./mask.png`) to the image before using our model. As our training images for the image translation model are all after masking and we find that on regular square image without masking sometimes it will generate some artifacts which can deteriorate the downstream segmentation quality.
 
 ### Training
 For image translation, please refer to [CycleGAN](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix).
